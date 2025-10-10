@@ -9,7 +9,7 @@ import NewChatLayout from './components/NewChatLayout';
 function App() {
   return (
     <div className="dark">
-      <div className="font-display bg-background-dark text-gray-300 antialiased">
+      <div className="font-display text-gray-300 antialiased">
         <Router>
           <Routes>
             <Route path="/" element={<LoginPage />} />
