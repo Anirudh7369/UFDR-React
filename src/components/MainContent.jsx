@@ -1,18 +1,59 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import UserMessage from './UserMessage';
 import AIMessage from './AIMessage';
 import AIMessageWithTyping from './AIMessageWithTyping';
+import { useChat } from '../context/ChatContext';
+import { useUser } from '../context/UserContext';
 
-const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
+const MainContent = ({ isChatView = false, sessionId = null }) => {
+  const navigate = useNavigate();
+  const { user, logout } = useUser();
+  const {
+    currentSessionId,
+    createNewChat,
+    updateChatTitle,
+    addMessageToChat,
+    getChatBySessionId
+  } = useChat();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState(sessionId || currentSessionId);
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  console.log('MainContent - isChatView:', isChatView, 'messages:', messages);
+  // Sync activeSessionId with sessionId prop when it changes
+  useEffect(() => {
+    const newSessionId = sessionId || currentSessionId;
+    const sessionChanged = newSessionId !== activeSessionId;
+
+    setActiveSessionId(newSessionId);
+
+    // Only reload messages when session actually changes
+    if (sessionChanged) {
+      if (!newSessionId) {
+        // Clear messages when switching to a new chat (null sessionId)
+        setMessages([]);
+      } else {
+        // Load messages from the new session
+        const chat = getChatBySessionId(newSessionId);
+        if (chat) {
+          // Ensure all loaded messages have isTyping: false (they're historical)
+          const messagesWithoutTyping = chat.messages.map(msg => ({
+            ...msg,
+            isTyping: false
+          }));
+          setMessages(messagesWithoutTyping);
+        }
+      }
+    }
+  }, [sessionId, currentSessionId, activeSessionId, getChatBySessionId]);
+
+  console.log('MainContent - isChatView:', isChatView, 'sessionId:', activeSessionId, 'messages:', messages);
 
   const handleTextareaResize = () => {
     if (textareaRef.current) {
@@ -35,6 +76,17 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
 
     console.log('Sending message:', inputValue);
 
+    // Create new session if none exists
+    let sessionIdToUse = activeSessionId;
+    const isFirstMessage = messages.length === 0;
+
+    if (!sessionIdToUse) {
+      sessionIdToUse = createNewChat();
+      setActiveSessionId(sessionIdToUse);
+      // Navigate to the chat route with the new session ID
+      navigate(`/chat/${sessionIdToUse}`);
+    }
+
     // 1. Add user message to the UI instantly
     const userMessage = {
       id: Date.now(),
@@ -42,11 +94,25 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
       content: inputValue,
     };
     console.log('Adding user message:', userMessage);
+
+    // Update local state
     setMessages(prevMessages => {
       const newMessages = [...prevMessages, userMessage];
       console.log('New messages array:', newMessages);
       return newMessages;
     });
+
+    // Update context
+    addMessageToChat(sessionIdToUse, userMessage);
+
+    // Update chat title based on first message (truncate if too long)
+    if (isFirstMessage) {
+      const title = inputValue.length > 30
+        ? inputValue.substring(0, 30) + '...'
+        : inputValue;
+      updateChatTitle(sessionIdToUse, title);
+    }
+
     const currentQuery = inputValue;
     setInputValue(''); // Clear the input field
     setIsLoading(true);
@@ -59,11 +125,12 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
     try {
       // 2. Call the backend API
       console.log('Making API call to backend...');
-      
+
       // Format timestamp to match 2025-01-10T12:00:00Z format
       const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
       console.log('Formatted timestamp:', timestamp);
-      
+      console.log('Using session ID:', sessionIdToUse);
+
       const response = await fetch('http://localhost:8000/api/analytics', {
         method: 'POST',
         headers: {
@@ -72,8 +139,8 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
         body: JSON.stringify({
           query: currentQuery,
           current_timestamp: timestamp,
-          session_id: 'test-session-123',
-          email_id: 'investigator@example.com',
+          session_id: sessionIdToUse,
+          email_id: user?.email || 'anonymous@example.com',
         }),
       });
 
@@ -87,15 +154,19 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
       console.log('API response:', data);
 
       if (data.status === 'success' && data.message) {
-        // 3. Add AI message with typing effect
+        // 3. Add AI message with typing effect (only for new messages)
         const aiMessage = {
           id: Date.now() + 1,
           sender: 'ai',
           content: data.message,
-          isTyping: true,
+          isTyping: true, // Enable typing animation for new messages
         };
         console.log('Adding AI message:', aiMessage);
         setMessages(prevMessages => [...prevMessages, aiMessage]);
+
+        // Store without typing flag in context (for future loads)
+        const aiMessageForStorage = { ...aiMessage, isTyping: false };
+        addMessageToChat(sessionIdToUse, aiMessageForStorage);
       } else {
         // Handle error case
         const errorMessage = {
@@ -105,11 +176,14 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
           isTyping: true,
         };
         setMessages(prevMessages => [...prevMessages, errorMessage]);
+
+        const errorMessageForStorage = { ...errorMessage, isTyping: false };
+        addMessageToChat(sessionIdToUse, errorMessageForStorage);
       }
 
     } catch (error) {
       console.error("Error fetching from API:", error);
-      
+
       // For testing: Add a mock AI response when backend is not available
       const mockResponse = {
         id: Date.now() + 1,
@@ -120,7 +194,7 @@ const MainContent = ({ isChatView = false, chatTitle = "New Chat" }) => {
 
 I received your message: "${currentQuery}"
 
-This is a **test response** since the backend is currently not accessible due to CORS issues. 
+This is a **test response** since the backend is currently not accessible due to CORS issues.
 
 **Mock Analysis Results:**
 - Query processed successfully
@@ -132,6 +206,9 @@ This is a **test response** since the backend is currently not accessible due to
       };
       console.log('Adding mock AI response:', mockResponse);
       setMessages(prevMessages => [...prevMessages, mockResponse]);
+
+      const mockResponseForStorage = { ...mockResponse, isTyping: false };
+      addMessageToChat(sessionIdToUse, mockResponseForStorage);
     } finally {
       setIsLoading(false);
     }
@@ -174,6 +251,10 @@ This is a **test response** since the backend is currently not accessible due to
   ];
 
 
+  // Get current chat title
+  const currentChat = activeSessionId ? getChatBySessionId(activeSessionId) : null;
+  const chatTitle = currentChat ? currentChat.title : "New Chat";
+
   return (
     <main className="flex flex-1 flex-col bg-surface-dark">
       <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
@@ -181,17 +262,29 @@ This is a **test response** since the backend is currently not accessible due to
           <h1 className="text-lg font-semibold text-white">{chatTitle}</h1>
         )}
         <div className="relative" ref={dropdownRef}>
-          <button 
+          <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="h-10 w-10 rounded-full bg-accent-dark flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface-dark"
+            className="h-10 w-10 rounded-full bg-accent-dark flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface-dark overflow-hidden"
           >
-            <span className="font-semibold text-white">JD</span>
+            {user?.picture ? (
+              <img src={user.picture} alt={user.name} className="h-full w-full object-cover" />
+            ) : (
+              <span className="font-semibold text-white">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </span>
+            )}
           </button>
           {dropdownOpen && (
             <div className="absolute right-0 mt-2 w-48 origin-top-right rounded-md bg-accent-dark shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none py-1">
-              <a className="block px-4 py-2 text-sm text-gray-300 hover:bg-surface-dark/50" href="#">
+              <button
+                onClick={() => {
+                  logout();
+                  navigate('/');
+                }}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface-dark/50"
+              >
                 Logout
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -203,7 +296,7 @@ This is a **test response** since the backend is currently not accessible due to
             // Show welcome screen if no messages exist
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="text-center w-full max-w-2xl mx-auto">
-                <h1 className="text-4xl font-bold text-white mb-4">Hi, John Doe</h1>
+                <h1 className="text-4xl font-bold text-white mb-4">Hi, {user?.name || 'User'}</h1>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12">
                   {promptCards.map((card, index) => (
                     <button 
@@ -226,13 +319,24 @@ This is a **test response** since the backend is currently not accessible due to
                 console.log('Rendering UserMessage with content:', message.content);
                 return <UserMessage key={message.id} message={message.content} />;
               } else {
-                console.log('Rendering AIMessage with content:', message.content);
-                return (
-                  <AIMessageWithTyping 
-                    key={message.id} 
-                    fullContent={message.content} 
-                  />
-                );
+                console.log('Rendering AIMessage with content:', message.content, 'isTyping:', message.isTyping);
+                // Use typing animation only for new messages (isTyping: true)
+                // For loaded messages from history, display instantly
+                if (message.isTyping) {
+                  return (
+                    <AIMessageWithTyping
+                      key={message.id}
+                      fullContent={message.content}
+                    />
+                  );
+                } else {
+                  return (
+                    <AIMessage
+                      key={message.id}
+                      message={message.content}
+                    />
+                  );
+                }
               }
             })
           )}
@@ -241,7 +345,7 @@ This is a **test response** since the backend is currently not accessible due to
       ) : (
         <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center">
           <div className="text-center w-full max-w-2xl mx-auto">
-            <h1 className="text-4xl font-bold text-white mb-4">Hi, John Doe</h1>
+            <h1 className="text-4xl font-bold text-white mb-4">Hi, {user?.name || 'User'}</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12">
               {promptCards.map((card, index) => (
                 <button 

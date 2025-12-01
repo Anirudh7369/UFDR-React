@@ -1,12 +1,14 @@
-import React from 'react';
+import { useParams } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MainContent from './MainContent';
 
 const ChatLayout = () => {
+  const { sessionId } = useParams();
+
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <Sidebar />
-      <MainContent isChatView={true} chatTitle="UFDR Report Analysis" />
+      <Sidebar activeSessionId={sessionId} />
+      <MainContent isChatView={true} sessionId={sessionId} />
     </div>
   );
 };

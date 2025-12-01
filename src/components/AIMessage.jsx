@@ -1,4 +1,4 @@
-import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import ResultCard from './ResultCard';
 
 const AIMessage = ({ message, resultCards }) => {
@@ -11,11 +11,23 @@ const AIMessage = ({ message, resultCards }) => {
       </div>
       <div className="flex-1 space-y-4">
         <p className="font-semibold text-primary">ForensicAnalyst AI</p>
-        <div className="space-y-4 text-gray-300">
-          {message.split('\n\n').map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-          
+        <div className="prose prose-invert prose-sm max-w-none text-gray-300">
+          <ReactMarkdown
+            components={{
+              // Custom styling for markdown elements
+              h1: ({ children }) => <h1 className="text-xl font-bold text-white mb-2">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-lg font-semibold text-white mb-2">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-base font-semibold text-white mb-2">{children}</h3>,
+              p: ({ children }) => <p className="text-gray-300 mb-2">{children}</p>,
+              strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+              ul: ({ children }) => <ul className="list-disc list-inside space-y-1 text-gray-300">{children}</ul>,
+              li: ({ children }) => <li className="text-gray-300">{children}</li>,
+              code: ({ children }) => <code className="bg-accent-dark px-2 py-1 rounded text-primary">{children}</code>,
+            }}
+          >
+            {message}
+          </ReactMarkdown>
+
           {resultCards && resultCards.map((card, index) => (
             <ResultCard
               key={index}

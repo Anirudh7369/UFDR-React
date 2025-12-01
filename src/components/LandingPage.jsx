@@ -1,10 +1,14 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '../context/UserContext';
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useUser();
 
-  const handleLoginClick = () => {
+  const handleAuthClick = () => {
+    if (isAuthenticated) {
+      logout();
+    }
     navigate('/');
   };
 
@@ -17,12 +21,26 @@ const LandingPage = () => {
           </svg>
           <h2 className="text-xl font-bold text-gray-100 dark:text-white">ForensicAnalyst AI</h2>
         </div>
-        <button 
-          onClick={handleLoginClick}
-          className="px-5 py-2 text-sm font-medium rounded-DEFAULT bg-primary/20 dark:bg-primary/20 text-white hover:bg-primary/30 dark:hover:bg-primary/30 transition-colors"
-        >
-          Login
-        </button>
+        <div className="flex items-center gap-3">
+          {isAuthenticated && user && (
+            <div className="flex items-center gap-2">
+              {user.picture && (
+                <img
+                  src={user.picture}
+                  alt={user.name}
+                  className="h-8 w-8 rounded-full"
+                />
+              )}
+              <span className="text-sm text-white hidden sm:inline">{user.name}</span>
+            </div>
+          )}
+          <button
+            onClick={handleAuthClick}
+            className="px-5 py-2 text-sm font-medium rounded-DEFAULT bg-primary/20 dark:bg-primary/20 text-white hover:bg-primary/30 dark:hover:bg-primary/30 transition-colors"
+          >
+            {isAuthenticated ? 'Logout' : 'Login'}
+          </button>
+        </div>
       </header>
       <main className="flex flex-1 flex-col items-center justify-center px-4 text-center">
         <div className="flex flex-col items-center max-w-3xl space-y-8">

@@ -1,12 +1,11 @@
-import React from 'react';
 import Sidebar from './Sidebar';
 import MainContent from './MainContent';
 
 const AppLayout = () => {
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <Sidebar />
-      <MainContent isChatView={true} chatTitle="UFDR Report Analysis" />
+      <Sidebar activeSessionId={null} />
+      <MainContent isChatView={false} sessionId={null} />
     </div>
   );
 };
