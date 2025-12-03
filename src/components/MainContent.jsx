@@ -267,7 +267,18 @@ This is a **test response** since the backend is currently not accessible due to
             className="h-10 w-10 rounded-full bg-accent-dark flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface-dark overflow-hidden"
           >
             {user?.picture ? (
-              <img src={user.picture} alt={user.name} className="h-full w-full object-cover" />
+              <img
+                src={user.picture}
+                alt={user.name}
+                className="h-full w-full object-cover"
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                onError={(e) => {
+                  console.error('Error loading profile image:', user.picture);
+                  e.target.style.display = 'none';
+                  e.target.parentElement.innerHTML = `<span class="font-semibold text-white">${user?.name?.charAt(0).toUpperCase() || 'U'}</span>`;
+                }}
+              />
             ) : (
               <span className="font-semibold text-white">
                 {user?.name?.charAt(0).toUpperCase() || 'U'}

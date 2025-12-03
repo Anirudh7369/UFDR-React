@@ -24,12 +24,20 @@ const LandingPage = () => {
         <div className="flex items-center gap-3">
           {isAuthenticated && user && (
             <div className="flex items-center gap-2">
-              {user.picture && (
+              {user.picture ? (
                 <img
                   src={user.picture}
                   alt={user.name}
                   className="h-8 w-8 rounded-full"
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
                 />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                  <span className="text-sm font-semibold text-white">
+                    {user.name?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                </div>
               )}
               <span className="text-sm text-white hidden sm:inline">{user.name}</span>
             </div>
