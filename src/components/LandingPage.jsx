@@ -1,12 +1,10 @@
-import React, { useRef } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import UploadUFDR from "./UploadUFDR";
 
 const LandingPage = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useUser();
-  const uploadRef = useRef(null);
 
   const handleAuthClick = () => {
     if (isAuthenticated) {
@@ -16,13 +14,7 @@ const LandingPage = () => {
   };
 
   const handleUploadClick = () => {
-    // smooth scroll to upload section on the same page
-    if (uploadRef.current) {
-      uploadRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      // fallback navigation if ref missing
-      navigate("/dashboard");
-    }
+    navigate("/upload");
   };
 
   return (
@@ -34,16 +26,15 @@ const LandingPage = () => {
             fill="none"
             viewBox="0 0 48 48"
             xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
           >
-            <path
-              d="M6 6H42L36 24L42 42H6L12 24L6 6Z"
-              fill="currentColor"
-            ></path>
+            <path d="M6 6H42L36 24L42 42H6L12 24L6 6Z" fill="currentColor" />
           </svg>
           <h2 className="text-xl font-bold text-gray-100 dark:text-white">
             ForensicAnalyst AI
           </h2>
         </div>
+
         <div className="flex items-center gap-3">
           {isAuthenticated && user && (
             <div className="flex items-center gap-2">
@@ -58,7 +49,7 @@ const LandingPage = () => {
               ) : (
                 <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
                   <span className="text-sm font-semibold text-white">
-                    {user.name?.charAt(0).toUpperCase() || 'U'}
+                    {user.name?.charAt(0).toUpperCase() || "U"}
                   </span>
                 </div>
               )}
@@ -67,6 +58,7 @@ const LandingPage = () => {
               </span>
             </div>
           )}
+
           <button
             onClick={handleAuthClick}
             className="px-5 py-2 text-sm font-medium rounded-DEFAULT bg-primary/20 dark:bg-primary/20 text-white hover:bg-primary/30 dark:hover:bg-primary/30 transition-colors"
@@ -87,7 +79,7 @@ const LandingPage = () => {
             ForensicAnalyst is your AI force multiplier in solving cases.
           </p>
           <div className="w-full max-w-md pt-4">
-            <div className="aurora-bar"></div>
+            <div className="aurora-bar" />
           </div>
         </div>
 
@@ -101,15 +93,7 @@ const LandingPage = () => {
         </div>
       </main>
 
-      {/* Upload section (scrolled into view) */}
-      <section
-        ref={uploadRef}
-        className="w-full flex justify-center py-16 bg-transparent"
-      >
-        <div className="w-full max-w-3xl px-4">
-          <UploadUFDR />
-        </div>
-      </section>
+      {/* NOTE: UploadUFDR removed from LandingPage. Upload UI now lives on /upload route */}
     </div>
   );
 };

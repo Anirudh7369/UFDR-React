@@ -7,6 +7,7 @@ import LandingPage from "./components/LandingPage";
 import AppLayout from "./components/AppLayout";
 import ChatLayout from "./components/ChatLayout";
 import NewChatLayout from "./components/NewChatLayout";
+import UploadPage from "./components/UploadPage";
 
 // Google OAuth Client ID - Must be set in .env file
 // See GOOGLE_OAUTH_SETUP.md for setup instructions
@@ -29,6 +30,10 @@ function App() {
                 <Routes>
                   <Route path="/" element={<LoginPage />} />
                   <Route path="/landing" element={<LandingPage />} />
+
+                  {/* Upload route */}
+                  <Route path="/upload" element={<UploadPage />} />
+
                   <Route path="/dashboard" element={<AppLayout />} />
                   <Route path="/chat/:sessionId" element={<ChatLayout />} />
                   <Route path="/new-chat" element={<NewChatLayout />} />
