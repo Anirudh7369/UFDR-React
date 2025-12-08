@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import UserMessage from './UserMessage';
-import AIMessage from './AIMessage';
-import AIMessageWithTyping from './AIMessageWithTyping';
-import { useChat } from '../context/ChatContext';
-import { useUser } from '../context/UserContext';
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import UserMessage from "./UserMessage";
+import AIMessage from "./AIMessage";
+import AIMessageWithTyping from "./AIMessageWithTyping";
+import { useChat } from "../context/ChatContext";
+import { useUser } from "../context/UserContext";
+import UploadUFDR from "./UploadUFDR";
 
 const MainContent = ({ isChatView = false, sessionId = null }) => {
   const navigate = useNavigate();
@@ -14,14 +15,18 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
     createNewChat,
     updateChatTitle,
     addMessageToChat,
-    getChatBySessionId
+    getChatBySessionId,
   } = useChat();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState(sessionId || currentSessionId);
+  const [activeSessionId, setActiveSessionId] = useState(
+    sessionId || currentSessionId
+  );
+  const [showUploader, setShowUploader] = useState(false);
+
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -33,8 +38,10 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
 
     setActiveSessionId(newSessionId);
 
-    // Only reload messages when session actually changes
     if (sessionChanged) {
+      // Close uploader when switching sessions
+      setShowUploader(false);
+
       if (!newSessionId) {
         // Clear messages when switching to a new chat (null sessionId)
         setMessages([]);
@@ -42,10 +49,9 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
         // Load messages from the new session
         const chat = getChatBySessionId(newSessionId);
         if (chat) {
-          // Ensure all loaded messages have isTyping: false (they're historical)
-          const messagesWithoutTyping = chat.messages.map(msg => ({
+          const messagesWithoutTyping = chat.messages.map((msg) => ({
             ...msg,
-            isTyping: false
+            isTyping: false,
           }));
           setMessages(messagesWithoutTyping);
         }
@@ -53,17 +59,16 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
     }
   }, [sessionId, currentSessionId, activeSessionId, getChatBySessionId]);
 
-  console.log('MainContent - isChatView:', isChatView, 'sessionId:', activeSessionId, 'messages:', messages);
-
   const handleTextareaResize = () => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height =
+        textareaRef.current.scrollHeight + "px";
     }
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -74,8 +79,6 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
-    console.log('Sending message:', inputValue);
-
     // Create new session if none exists
     let sessionIdToUse = activeSessionId;
     const isFirstMessage = messages.length === 0;
@@ -83,129 +86,109 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
     if (!sessionIdToUse) {
       sessionIdToUse = createNewChat();
       setActiveSessionId(sessionIdToUse);
-      // Navigate to the chat route with the new session ID
       navigate(`/chat/${sessionIdToUse}`);
     }
 
     // 1. Add user message to the UI instantly
     const userMessage = {
       id: Date.now(),
-      sender: 'user',
+      sender: "user",
       content: inputValue,
     };
-    console.log('Adding user message:', userMessage);
 
-    // Update local state
-    setMessages(prevMessages => {
-      const newMessages = [...prevMessages, userMessage];
-      console.log('New messages array:', newMessages);
-      return newMessages;
-    });
-
-    // Update context
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
     addMessageToChat(sessionIdToUse, userMessage);
 
-    // Update chat title based on first message (truncate if too long)
+    // Update chat title based on first message
     if (isFirstMessage) {
-      const title = inputValue.length > 30
-        ? inputValue.substring(0, 30) + '...'
-        : inputValue;
+      const title =
+        inputValue.length > 30
+          ? inputValue.substring(0, 30) + "..."
+          : inputValue;
       updateChatTitle(sessionIdToUse, title);
     }
 
     const currentQuery = inputValue;
-    setInputValue(''); // Clear the input field
+    setInputValue("");
     setIsLoading(true);
 
-    // Reset textarea height
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = "auto";
     }
 
     try {
-      // 2. Call the backend API
-      console.log('Making API call to backend...');
+      // Format timestamp as 2025-01-10T12:00:00Z
+      const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
-      // Format timestamp to match 2025-01-10T12:00:00Z format
-      const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-      console.log('Formatted timestamp:', timestamp);
-      console.log('Using session ID:', sessionIdToUse);
-
-      const response = await fetch('http://localhost:8000/api/analytics', {
-        method: 'POST',
+      const response = await fetch("http://localhost:8000/api/analytics", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           query: currentQuery,
           current_timestamp: timestamp,
           session_id: sessionIdToUse,
-          email_id: user?.email || 'anonymous@example.com',
+          email_id: user?.email || "anonymous@example.com",
         }),
       });
 
-      console.log('Response status:', response.status);
-      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('API response:', data);
 
-      if (data.status === 'success' && data.message) {
-        // 3. Add AI message with typing effect (only for new messages)
+      if (data.status === "success" && data.message) {
         const aiMessage = {
           id: Date.now() + 1,
-          sender: 'ai',
+          sender: "ai",
           content: data.message,
-          isTyping: true, // Enable typing animation for new messages
+          isTyping: true,
         };
-        console.log('Adding AI message:', aiMessage);
-        setMessages(prevMessages => [...prevMessages, aiMessage]);
 
-        // Store without typing flag in context (for future loads)
+        setMessages((prevMessages) => [...prevMessages, aiMessage]);
+
         const aiMessageForStorage = { ...aiMessage, isTyping: false };
         addMessageToChat(sessionIdToUse, aiMessageForStorage);
       } else {
-        // Handle error case
         const errorMessage = {
           id: Date.now() + 1,
-          sender: 'ai',
-          content: 'I apologize, but I encountered an error while processing your request. Please try again.',
+          sender: "ai",
+          content:
+            "I apologize, but I encountered an error while processing your request. Please try again.",
           isTyping: true,
         };
-        setMessages(prevMessages => [...prevMessages, errorMessage]);
+
+        setMessages((prevMessages) => [...prevMessages, errorMessage]);
 
         const errorMessageForStorage = { ...errorMessage, isTyping: false };
         addMessageToChat(sessionIdToUse, errorMessageForStorage);
       }
-
     } catch (error) {
       console.error("Error fetching from API:", error);
 
-      // For testing: Add a mock AI response when backend is not available
       const mockResponse = {
         id: Date.now() + 1,
-        sender: 'ai',
+        sender: "ai",
         content: `### **ForensicAnalyst Report**
 
 **Query:** \`${currentQuery}\`
 
 I received your message: "${currentQuery}"
 
-This is a **test response** since the backend is currently not accessible due to CORS issues.
+This is a **test response** since the backend is currently not accessible.
 
 **Mock Analysis Results:**
 - Query processed successfully
 - Response generated with typing effect
 - Markdown formatting supported
 
-*Note: This is a demo response. Once the backend CORS is configured, real analysis will be provided.*`,
+*Note: This is a demo response. Once the backend is configured, real analysis will be provided.*`,
         isTyping: true,
       };
-      console.log('Adding mock AI response:', mockResponse);
-      setMessages(prevMessages => [...prevMessages, mockResponse]);
+
+      setMessages((prevMessages) => [...prevMessages, mockResponse]);
 
       const mockResponseForStorage = { ...mockResponse, isTyping: false };
       addMessageToChat(sessionIdToUse, mockResponseForStorage);
@@ -223,40 +206,41 @@ This is a **test response** since the backend is currently not accessible due to
     };
 
     if (dropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [dropdownOpen]);
 
   const promptCards = [
     {
       title: "Summarize call logs for user 'John Doe'",
-      description: "Get a quick overview of all incoming and outgoing calls."
+      description: "Get a quick overview of all incoming and outgoing calls.",
     },
     {
       title: "Find all locations visited on October 9th",
-      description: "Pinpoint geographic data for a specific date."
+      description: "Pinpoint geographic data for a specific date.",
     },
     {
       title: "Identify all social media applications",
-      description: "List all installed and used social media apps."
+      description: "List all installed and used social media apps.",
     },
     {
       title: "Recover deleted images from gallery",
-      description: "Attempt to restore image files marked for deletion."
-    }
+      description: "Attempt to restore image files marked for deletion.",
+    },
   ];
 
-
-  // Get current chat title
-  const currentChat = activeSessionId ? getChatBySessionId(activeSessionId) : null;
+  const currentChat = activeSessionId
+    ? getChatBySessionId(activeSessionId)
+    : null;
   const chatTitle = currentChat ? currentChat.title : "New Chat";
 
   return (
     <main className="flex flex-1 flex-col bg-surface-dark">
+      {/* Top bar */}
       <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
         {isChatView && (
           <h1 className="text-lg font-semibold text-white">{chatTitle}</h1>
@@ -274,14 +258,16 @@ This is a **test response** since the backend is currently not accessible due to
                 referrerPolicy="no-referrer"
                 crossOrigin="anonymous"
                 onError={(e) => {
-                  console.error('Error loading profile image:', user.picture);
-                  e.target.style.display = 'none';
-                  e.target.parentElement.innerHTML = `<span class="font-semibold text-white">${user?.name?.charAt(0).toUpperCase() || 'U'}</span>`;
+                  console.error("Error loading profile image:", user.picture);
+                  e.target.style.display = "none";
+                  e.target.parentElement.innerHTML = `<span class="font-semibold text-white">${
+                    user?.name?.charAt(0).toUpperCase() || "U"
+                  }</span>`;
                 }}
               />
             ) : (
               <span className="font-semibold text-white">
-                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                {user?.name?.charAt(0).toUpperCase() || "U"}
               </span>
             )}
           </button>
@@ -290,7 +276,7 @@ This is a **test response** since the backend is currently not accessible due to
               <button
                 onClick={() => {
                   logout();
-                  navigate('/');
+                  navigate("/");
                 }}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface-dark/50"
               >
@@ -300,39 +286,41 @@ This is a **test response** since the backend is currently not accessible due to
           )}
         </div>
       </header>
-      
+
+      {/* Main area: chat view or welcome view */}
       {isChatView ? (
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           {messages.length === 0 ? (
-            // Show welcome screen if no messages exist
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="text-center w-full max-w-2xl mx-auto">
-                <h1 className="text-4xl font-bold text-white mb-4">Hi, {user?.name || 'User'}</h1>
+                <h1 className="text-4xl font-bold text-white mb-4">
+                  Hi, {user?.name || "User"}
+                </h1>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12">
                   {promptCards.map((card, index) => (
-                    <button 
+                    <button
                       key={index}
                       onClick={() => setInputValue(card.title)}
                       className="text-left p-4 rounded-lg bg-accent-dark hover:bg-accent-dark/70 transition-colors duration-200"
                     >
-                      <p className="font-semibold text-gray-200">{card.title}</p>
-                      <p className="text-sm text-gray-400">{card.description}</p>
+                      <p className="font-semibold text-gray-200">
+                        {card.title}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {card.description}
+                      </p>
                     </button>
                   ))}
                 </div>
               </div>
             </div>
           ) : (
-            // Show real conversation messages
             messages.map((message) => {
-              console.log('Rendering message:', message);
-              if (message.sender === 'user') {
-                console.log('Rendering UserMessage with content:', message.content);
-                return <UserMessage key={message.id} message={message.content} />;
+              if (message.sender === "user") {
+                return (
+                  <UserMessage key={message.id} message={message.content} />
+                );
               } else {
-                console.log('Rendering AIMessage with content:', message.content, 'isTyping:', message.isTyping);
-                // Use typing animation only for new messages (isTyping: true)
-                // For loaded messages from history, display instantly
                 if (message.isTyping) {
                   return (
                     <AIMessageWithTyping
@@ -342,10 +330,7 @@ This is a **test response** since the backend is currently not accessible due to
                   );
                 } else {
                   return (
-                    <AIMessage
-                      key={message.id}
-                      message={message.content}
-                    />
+                    <AIMessage key={message.id} message={message.content} />
                   );
                 }
               }
@@ -356,10 +341,12 @@ This is a **test response** since the backend is currently not accessible due to
       ) : (
         <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center">
           <div className="text-center w-full max-w-2xl mx-auto">
-            <h1 className="text-4xl font-bold text-white mb-4">Hi, {user?.name || 'User'}</h1>
+            <h1 className="text-4xl font-bold text-white mb-4">
+              Hi, {user?.name || "User"}
+            </h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12">
               {promptCards.map((card, index) => (
-                <button 
+                <button
                   key={index}
                   className="text-left p-4 rounded-lg bg-accent-dark hover:bg-accent-dark/70 transition-colors duration-200"
                 >
@@ -371,8 +358,36 @@ This is a **test response** since the backend is currently not accessible due to
           </div>
         </div>
       )}
-      
+
+      {/* Footer: upload + input bar */}
       <div className="border-t border-gray-800 bg-surface-dark p-6">
+        {/* UFDR uploader panel (like ChatGPT attachment UI) */}
+        {isChatView && (
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => setShowUploader((prev) => !prev)}
+              className="mb-2 inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-accent-dark px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-accent-dark/80 transition-colors"
+            >
+              <span>📎</span>
+              <span>
+                {showUploader ? "Hide UFDR upload" : "Upload UFDR report"}
+              </span>
+            </button>
+
+            {showUploader && (
+              <div className="rounded-lg border border-gray-700 bg-accent-dark/60 p-3">
+                <p className="mb-2 text-xs text-gray-400">
+                  Attach a UFDR file for analysis. Large files are uploaded via
+                  MinIO; you can continue chatting while it processes.
+                </p>
+                <UploadUFDR />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Chat input */}
         <form onSubmit={handleSendMessage}>
           <div className="relative flex items-center">
             <textarea
@@ -381,31 +396,37 @@ This is a **test response** since the backend is currently not accessible due to
               onChange={(e) => setInputValue(e.target.value)}
               onInput={handleTextareaResize}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleSendMessage(e);
                 }
               }}
               className="w-full resize-none rounded-lg bg-accent-dark border-gray-700 py-3 pl-4 pr-14 text-white placeholder-gray-500 focus:border-primary focus:ring-primary"
-              placeholder={isChatView ? "Ask a follow-up question..." : "Ask a question or type a command..."}
+              placeholder={
+                isChatView
+                  ? "Ask a follow-up question..."
+                  : "Ask a question or type a command..."
+              }
               rows="1"
               disabled={isLoading}
             />
-            <button 
+            <button
               type="submit"
               disabled={isLoading || !inputValue.trim()}
               className="absolute right-2.5 flex h-8 w-8 items-center justify-center rounded-md bg-primary text-white transition-colors hover:bg-primary/90 disabled:bg-primary/50"
             >
               {isLoading ? (
-                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
               ) : (
                 <span className="material-symbols-outlined">send</span>
               )}
             </button>
           </div>
         </form>
+
         <p className="mt-2 text-center text-xs text-gray-500">
-          ForensicAnalyst AI can make mistakes. Consider checking important information.
+          ForensicAnalyst AI can make mistakes. Consider checking important
+          information.
         </p>
       </div>
     </main>
