@@ -32,16 +32,49 @@ function humanBytes(n) {
   return (n / Math.pow(1024, i)).toFixed(2) + " " + sizes[i];
 }
 
+// Simple formatter for ETA in seconds → "Xs", "Xm Ys", "Xh Ym"
+function formatEta(seconds) {
+  if (seconds == null || !isFinite(seconds) || seconds < 0) return null;
+  const s = Math.round(seconds);
+  if (s <= 0) return "a few seconds";
+  if (s < 60) return `${s} sec`;
+  const m = Math.floor(s / 60);
+  const remS = s % 60;
+  if (m < 60) {
+    if (remS === 0) return `${m} min`;
+    return `${m} min ${remS} sec`;
+  }
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  if (remM === 0) return `${h} hr`;
+  return `${h} hr ${remM} min`;
+}
+
 export default function UploadUFDR() {
   const [file, setFile] = useState(null);
-  const [status, setStatus] = useState("idle"); // idle, initiating, uploading, completing, queued_for_ingest, completed, error, aborted
+  const [status, setStatus] = useState("idle"); // idle, initiating, uploading, completing, queued_for_ingest, completed, error, aborted, failed
   const [message, setMessage] = useState(null);
   const [progress, setProgress] = useState({ uploadedBytes: 0, totalBytes: 0 });
   const [uploadId, setUploadId] = useState(null);
+
+  // For aborting upload
   const abortControllerRef = useRef(null);
 
-  // Tunable
+  // For ETA calculation
+  const [etaSeconds, setEtaSeconds] = useState(null);
+  const startTimeRef = useRef(null);
+
+  // For UI after completion
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [hidden, setHidden] = useState(false); // when true, component disappears completely
+
+  // Tunable concurrency for multipart upload
   const concurrency = 3;
+
+  // If we've auto-hidden, render nothing (chat goes back to normal layout)
+  if (hidden) {
+    return null;
+  }
 
   const onFileChange = (e) => {
     setFile(e.target.files[0] || null);
@@ -49,6 +82,8 @@ export default function UploadUFDR() {
     setStatus("idle");
     setProgress({ uploadedBytes: 0, totalBytes: 0 });
     setUploadId(null);
+    setEtaSeconds(null);
+    startTimeRef.current = null;
   };
 
   const postJSON = async (path, body) => {
@@ -111,8 +146,10 @@ export default function UploadUFDR() {
             d.status === "completed" ||
             d.status === "failed"
           ) {
-            setStatus(d.status === "failed" ? "failed" : "completed");
+            const finalStatus = d.status === "failed" ? "failed" : "completed";
+            setStatus(finalStatus);
             setMessage(d);
+            // We are already hiding after upload complete; no extra UI change here
             running = false;
             return;
           }
@@ -134,6 +171,8 @@ export default function UploadUFDR() {
 
     setStatus("initiating");
     setMessage(null);
+    setEtaSeconds(null);
+    startTimeRef.current = null;
     abortControllerRef.current = new AbortController();
 
     try {
@@ -151,6 +190,8 @@ export default function UploadUFDR() {
       setUploadId(initResp.upload_id);
       setProgress({ uploadedBytes: 0, totalBytes: file.size });
       setStatus("uploading");
+      startTimeRef.current = Date.now();
+      setEtaSeconds(null);
 
       // Prepare parts info
       const partsInfo = initResp.parts; // array of { part_number, url }
@@ -166,6 +207,7 @@ export default function UploadUFDR() {
           if (i >= partsInfo.length) break;
           const pinfo = partsInfo[i];
           const partNumber = pinfo.part_number;
+
           // slice the file for multi-part uploads
           let blobToSend = file;
           if (totalParts > 1 && partSize > 0) {
@@ -173,28 +215,35 @@ export default function UploadUFDR() {
             const end = Math.min(start + partSize, file.size);
             blobToSend = file.slice(start, end);
           }
-          // Try upload with a couple retries
-          let attempt = 0;
-          const maxAttempts = 3;
-          let etag = null;
-          while (attempt < maxAttempts) {
-            try {
-              etag = await uploadToPresignedUrl(pinfo.url, blobToSend);
-              break;
-            } catch (err) {
-              attempt++;
-              if (attempt >= maxAttempts) throw err;
-              await new Promise((r) => setTimeout(r, 1000 * attempt)); // backoff
-            }
-          }
-          // update approximate progress
-          setProgress((p) => ({
-            ...p,
-            uploadedBytes: Math.min(
+
+          // Single attempt upload (no retry, simpler / no ESLint issues)
+          const etag = await uploadToPresignedUrl(pinfo.url, blobToSend);
+
+          // update approximate progress + ETA
+          setProgress((p) => {
+            const newUploaded = Math.min(
               p.uploadedBytes + (blobToSend.size || 0),
               p.totalBytes
-            ),
-          }));
+            );
+            const updated = {
+              ...p,
+              uploadedBytes: newUploaded,
+            };
+
+            if (startTimeRef.current && newUploaded > 0 && p.totalBytes > 0) {
+              const elapsedSec =
+                (Date.now() - startTimeRef.current) / 1000 || 0.1;
+              const speed = newUploaded / elapsedSec; // bytes per sec
+              const remainingBytes = p.totalBytes - newUploaded;
+              if (remainingBytes > 0 && speed > 0) {
+                setEtaSeconds(remainingBytes / speed);
+              } else {
+                setEtaSeconds(0);
+              }
+            }
+
+            return updated;
+          });
           uploadedParts.push({ part_number: partNumber, etag });
         }
       };
@@ -206,6 +255,7 @@ export default function UploadUFDR() {
       await Promise.all(runners);
 
       setStatus("completing");
+      setEtaSeconds(null); // upload finished, no more ETA
 
       // 3) complete - send parts list exactly as returned ETags
       const completeBody = {
@@ -214,16 +264,25 @@ export default function UploadUFDR() {
           etag: p.etag,
         })),
       };
-      const completeResp = await putJSON(
+      await putJSON(
         `/api/uploads/${initResp.upload_id}/complete`,
         completeBody
       );
 
+      // 👉 At this point, file upload is done.
+      // Show success, then hide component so chat UI looks normal again.
       setStatus("queued_for_ingest");
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setHidden(true); // remove upload UI entirely
+      }, 2000);
 
-      // 4) start polling for ingest progress
+      // 4) start polling for ingest progress (runs in background now)
       startPollProgress(initResp.upload_id);
     } catch (err) {
+      setEtaSeconds(null);
+      startTimeRef.current = null;
       if (err.name === "AbortError") {
         setStatus("aborted");
         setMessage("Upload aborted");
@@ -238,9 +297,24 @@ export default function UploadUFDR() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       setStatus("aborted");
+      setEtaSeconds(null);
+      startTimeRef.current = null;
     }
   };
 
+  // While success banner is active, show only that (no file input/buttons)
+  if (showSuccess) {
+    return (
+      <div className="p-4 rounded-2xl bg-surface-dark text-sm">
+        <h3 className="text-lg font-semibold mb-2">Upload UFDR Report</h3>
+        <div className="mt-1 text-sm text-green-400">
+          ✅ UFDR report has been uploaded successfully.
+        </div>
+      </div>
+    );
+  }
+
+  // Normal upload UI
   return (
     <div className="p-4 rounded-2xl bg-surface-dark text-sm">
       <h3 className="text-lg font-semibold mb-2">Upload UFDR Report</h3>
@@ -298,10 +372,25 @@ export default function UploadUFDR() {
           {humanBytes(progress.uploadedBytes)} /{" "}
           {humanBytes(progress.totalBytes)}
         </div>
+
+        {/* ETA only while uploading */}
+        {status === "uploading" && formatEta(etaSeconds) && (
+          <div className="text-xs text-gray-400 mt-1">
+            Estimated time remaining: ~{formatEta(etaSeconds)}
+          </div>
+        )}
       </div>
 
-      {message && (
+      {message && status !== "aborted" && status !== "error" && (
         <pre className="mt-3 p-3 bg-black/20 rounded text-xs whitespace-pre-wrap">
+          {typeof message === "string"
+            ? message
+            : JSON.stringify(message, null, 2)}
+        </pre>
+      )}
+
+      {status === "error" && message && (
+        <pre className="mt-3 p-3 bg-red-900/40 border border-red-500/40 rounded text-xs whitespace-pre-wrap">
           {typeof message === "string"
             ? message
             : JSON.stringify(message, null, 2)}

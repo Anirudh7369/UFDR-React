@@ -7,7 +7,6 @@ import LandingPage from "./components/LandingPage";
 import AppLayout from "./components/AppLayout";
 import ChatLayout from "./components/ChatLayout";
 import NewChatLayout from "./components/NewChatLayout";
-import UploadPage from "./components/UploadPage";
 
 // Google OAuth Client ID - Must be set in .env file
 // See GOOGLE_OAUTH_SETUP.md for setup instructions
@@ -28,14 +27,19 @@ function App() {
             <ChatProvider>
               <Router>
                 <Routes>
+                  {/* Login */}
                   <Route path="/" element={<LoginPage />} />
+
+                  {/* Marketing / hero landing */}
                   <Route path="/landing" element={<LandingPage />} />
 
-                  {/* Upload route */}
-                  <Route path="/upload" element={<UploadPage />} />
-
+                  {/* Main dashboard layout (chat list + main content) */}
                   <Route path="/dashboard" element={<AppLayout />} />
+
+                  {/* Existing chat session */}
                   <Route path="/chat/:sessionId" element={<ChatLayout />} />
+
+                  {/* Fresh new chat session */}
                   <Route path="/new-chat" element={<NewChatLayout />} />
                 </Routes>
               </Router>

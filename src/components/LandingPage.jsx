@@ -13,8 +13,10 @@ const LandingPage = () => {
     navigate("/");
   };
 
+  // On click, go straight to the chat/dashboard view
   const handleUploadClick = () => {
-    navigate("/upload");
+    // If you prefer a fresh chat every time, use "/new-chat" instead.
+    navigate("/dashboard");
   };
 
   return (
@@ -93,7 +95,7 @@ const LandingPage = () => {
         </div>
       </main>
 
-      {/* NOTE: UploadUFDR removed from LandingPage. Upload UI now lives on /upload route */}
+      {/* NOTE: UploadUFDR UI now lives inside the chat/dashboard view, not on the LandingPage or a separate /upload page. */}
     </div>
   );
 };
