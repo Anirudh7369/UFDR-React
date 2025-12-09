@@ -6,6 +6,7 @@ import AIMessageWithTyping from "./AIMessageWithTyping";
 import { useChat } from "../context/ChatContext";
 import { useUser } from "../context/UserContext";
 import UploadUFDR from "./UploadUFDR";
+import UfdrExtractionOverlay from "./UfdrExtractionOverlay";
 
 const MainContent = ({ isChatView = false, sessionId = null }) => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
     sessionId || currentSessionId
   );
   const [showUploader, setShowUploader] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
 
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -381,7 +383,17 @@ This is a **test response** since the backend is currently not accessible.
                   Attach a UFDR file for analysis. Large files are uploaded via
                   MinIO; you can continue chatting while it processes.
                 </p>
-                <UploadUFDR />
+                <UploadUFDR
+                  onExtractionStart={() => {
+                    console.log('UFDR extraction started');
+                    setIsExtracting(true);
+                    setShowUploader(false); // Hide uploader while extracting
+                  }}
+                  onExtractionComplete={() => {
+                    console.log('UFDR extraction completed from uploader');
+                    setIsExtracting(false);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -429,6 +441,15 @@ This is a **test response** since the backend is currently not accessible.
           information.
         </p>
       </div>
+
+      {/* UFDR Extraction Overlay */}
+      <UfdrExtractionOverlay
+        isExtracting={isExtracting}
+        onComplete={() => {
+          setIsExtracting(false);
+          console.log('UFDR extraction completed!');
+        }}
+      />
     </main>
   );
 };
