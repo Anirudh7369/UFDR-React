@@ -50,7 +50,7 @@ function formatEta(seconds) {
   return `${h} hr ${remM} min`;
 }
 
-export default function UploadUFDR() {
+export default function UploadUFDR({ onExtractionStart, onExtractionComplete }) {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState("idle"); // idle, initiating, uploading, completing, queued_for_ingest, completed, error, aborted, failed
   const [message, setMessage] = useState(null);
@@ -273,6 +273,10 @@ export default function UploadUFDR() {
       // Show success, then hide component so chat UI looks normal again.
       setStatus("queued_for_ingest");
       setShowSuccess(true);
+
+      // Notify parent that extraction is starting with the upload_id
+      onExtractionStart?.(initResp.upload_id);
+
       setTimeout(() => {
         setShowSuccess(false);
         setHidden(true); // remove upload UI entirely
