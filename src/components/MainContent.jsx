@@ -28,6 +28,7 @@ const MainContent = ({ isChatView = false, sessionId = null }) => {
   );
   const [showUploader, setShowUploader] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [currentUploadId, setCurrentUploadId] = useState(null);
 
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -384,14 +385,16 @@ This is a **test response** since the backend is currently not accessible.
                   MinIO; you can continue chatting while it processes.
                 </p>
                 <UploadUFDR
-                  onExtractionStart={() => {
-                    console.log('UFDR extraction started');
+                  onExtractionStart={(uploadId) => {
+                    console.log('UFDR extraction started for upload:', uploadId);
+                    setCurrentUploadId(uploadId);
                     setIsExtracting(true);
                     setShowUploader(false); // Hide uploader while extracting
                   }}
                   onExtractionComplete={() => {
                     console.log('UFDR extraction completed from uploader');
                     setIsExtracting(false);
+                    setCurrentUploadId(null);
                   }}
                 />
               </div>
@@ -445,9 +448,16 @@ This is a **test response** since the backend is currently not accessible.
       {/* UFDR Extraction Overlay */}
       <UfdrExtractionOverlay
         isExtracting={isExtracting}
-        onComplete={() => {
+        uploadId={currentUploadId}
+        onComplete={(data) => {
           setIsExtracting(false);
-          console.log('UFDR extraction completed!');
+          setCurrentUploadId(null);
+          console.log('UFDR extraction completed!', data);
+
+          // Optionally show a success message
+          if (data?.overall_status === 'completed') {
+            console.log('✓ All data extracted successfully');
+          }
         }}
       />
     </main>

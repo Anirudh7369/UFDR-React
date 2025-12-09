@@ -1,14 +1,16 @@
 import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
-const UfdrExtractionOverlay = ({ isExtracting, onComplete }) => {
+const UfdrExtractionOverlay = ({ isExtracting, uploadId, onComplete }) => {
   useEffect(() => {
-    if (!isExtracting) return;
+    if (!isExtracting || !uploadId) return;
+
+    console.log('Starting extraction status polling for upload:', uploadId);
 
     // Poll the backend every 2 seconds to check extraction status
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/extraction-status', {
+        const response = await fetch(`http://localhost:8000/api/uploads/${uploadId}/extraction-status`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -17,10 +19,17 @@ const UfdrExtractionOverlay = ({ isExtracting, onComplete }) => {
 
         if (response.ok) {
           const data = await response.json();
+          console.log('Extraction status:', data);
 
-          if (data.status === 'completed') {
+          // Check if all extractions are complete
+          if (data.overall_status === 'completed') {
+            console.log('✓ All extractions complete!');
             clearInterval(pollInterval);
-            onComplete?.();
+            onComplete?.(data);
+          } else if (data.overall_status === 'failed') {
+            console.error('Extraction failed:', data.error_message);
+            clearInterval(pollInterval);
+            onComplete?.(data);
           }
         }
       } catch (error) {
@@ -28,8 +37,11 @@ const UfdrExtractionOverlay = ({ isExtracting, onComplete }) => {
       }
     }, 2000);
 
-    return () => clearInterval(pollInterval);
-  }, [isExtracting, onComplete]);
+    return () => {
+      console.log('Stopping extraction status polling');
+      clearInterval(pollInterval);
+    };
+  }, [isExtracting, uploadId, onComplete]);
 
   if (!isExtracting) return null;
 

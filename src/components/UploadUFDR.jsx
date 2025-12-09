@@ -274,8 +274,8 @@ export default function UploadUFDR({ onExtractionStart, onExtractionComplete }) 
       setStatus("queued_for_ingest");
       setShowSuccess(true);
 
-      // Notify parent that extraction is starting
-      onExtractionStart?.();
+      // Notify parent that extraction is starting with the upload_id
+      onExtractionStart?.(initResp.upload_id);
 
       setTimeout(() => {
         setShowSuccess(false);
